@@ -1,0 +1,298 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dealer Portal</title>
+    <style>
+        :root {
+            --primary: #3498db;
+            --error: #e74c3c;
+            --light-bg: #f8f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: var(--primary);
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        select {
+            padding: 10px 15px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            min-width: 250px;
+        }
+        #output {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--light-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .price-item {
+            display: flex;
+            align-items: center;
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid var(--primary);
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.07);
+        }
+        .loading, .error {
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .error {
+            background: #f8d7da;
+            color: var(--error);
+        }
+        .product-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .product-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 260px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            margin-bottom: 10px;
+        }
+        .product-card.selected, .product-card:active {
+            border: 2px solid var(--primary);
+            box-shadow: 0 4px 16px rgba(52,152,219,0.15);
+        }
+        .product-card:hover {
+            transform: scale(1.04);
+            box-shadow: 0 6px 18px rgba(52,152,219,0.18);
+        }
+        .product-img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            background: #f0f0f0;
+        }
+        .product-info {
+            padding: 15px;
+            text-align: center;
+        }
+        .view-prices-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        .view-prices-btn:hover {
+            background: #2980b9;
+        }
+        .dealer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .dealer-img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            vertical-align: middle;
+            border: 2px solid #eee;
+        }
+        .highlight {
+            color: var(--primary);
+            font-weight: bold;
+        }
+        .product-detail h3 {
+            margin-bottom: 18px;
+        }
+        .dealer-price {
+            margin-left: auto;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <h1>Dealer Portal</h1>
+    
+    <select id="productSelect">
+        <option value="">Loading products...</option>
+    </select>
+    
+    <div id="output"></div>
+
+    <script>
+    // Configuration
+    const PRODUCTS_API = "http://192.168.0.104:5000";
+    const PRICING_API = "http://192.168.0.104:3000";
+    const outputEl = document.getElementById('output');
+    const selectEl = document.getElementById('productSelect');
+    let productsCache = {};
+
+    // Display error message
+    function showError(message) {
+        outputEl.innerHTML = `<div class="error">${message}</div>`;
+        console.error(message);
+    }
+
+    // Load products into dropdown with images
+    async function loadProducts() {
+        try {
+            selectEl.innerHTML = '<option value="">Loading...</option>';
+            const response = await fetch(`${PRODUCTS_API}/products`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+            }
+            const products = await response.json();
+            if (!products || typeof products !== 'object' || Array.isArray(products) || Object.keys(products).length === 0) {
+                showError('No products found or invalid products data.');
+                console.error('Products API response:', products);
+                return;
+            }
+            productsCache = products;
+            selectEl.innerHTML = '<option value="">Select a product</option>';
+            Object.entries(products).forEach(([id, product]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = product.name;
+                selectEl.appendChild(option);
+            });
+            // Show product cards
+            showProductCards(products);
+        } catch (error) {
+            showError(`Failed to load products: ${error.message}`);
+            console.error('Fetch error:', error);
+        }
+    }
+
+    // Show product cards with images and descriptions
+    function showProductCards(products) {
+        let html = '<div class="product-cards">';
+        Object.entries(products).forEach(([id, product]) => {
+            // Use a placeholder image based on product name
+            let imgSrc = product.name.toLowerCase().includes('laptop') ?
+                'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=cover&w=400&q=80' :
+                'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=cover&w=400&q=80';
+            html += `
+                <div class="product-card" data-id="${id}" tabindex="0">
+                    <img src="${imgSrc}" alt="${product.name}" class="product-img" />
+                    <div class="product-info">
+                        <h4>${product.name}</h4>
+                        <p>${product.description}</p>
+                        <button class="view-prices-btn" data-id="${id}">View Prices</button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        outputEl.innerHTML = html;
+
+        // Add click/keyboard listeners for interactivity
+        document.querySelectorAll('.product-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                const id = this.getAttribute('data-id');
+                selectEl.value = id;
+                selectEl.dispatchEvent(new Event('change'));
+                highlightSelectedCard(id);
+            });
+            card.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.click();
+                }
+            });
+        });
+        document.querySelectorAll('.view-prices-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const id = this.getAttribute('data-id');
+                selectEl.value = id;
+                selectEl.dispatchEvent(new Event('change'));
+                highlightSelectedCard(id);
+            });
+        });
+    }
+
+    function highlightSelectedCard(id) {
+        document.querySelectorAll('.product-card').forEach(card => {
+            card.classList.toggle('selected', card.getAttribute('data-id') === id);
+        });
+    }
+
+    // Load prices for selected product
+    async function loadPrices(productId) {
+        try {
+            outputEl.innerHTML = '<div class="loading">Loading prices...</div>';
+            const response = await fetch(`${PRICING_API}/prices/${productId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+            }
+            // Log the raw response for debugging
+            let rawText = await response.text();
+            console.log('Raw pricing API response:', rawText);
+            let prices;
+            try {
+                prices = JSON.parse(rawText);
+            } catch (parseErr) {
+                showError(`Failed to parse pricing response: ${parseErr.message}. Raw: ${rawText}`);
+                return;
+            }
+            if (!prices || typeof prices !== 'object' || Object.keys(prices).length === 0) {
+                outputEl.innerHTML = `<div class="error">No pricing available or invalid response.<br>Raw: <pre>${rawText}</pre></div>`;
+                return;
+            }
+            let html = `<div class="product-detail">
+                <h3>Available Prices for <span class="highlight">${productsCache[productId]?.name || ''}</span></h3>
+                <div class="dealer-list">`;
+            Object.entries(prices).forEach(([dealerId, price]) => {
+                html += `
+                    <div class="price-item">
+                        <img src="https://api.dicebear.com/7.x/identicon/svg?seed=${dealerId}" class="dealer-img" alt="Dealer ${dealerId}" />
+                        <strong>Dealer ${dealerId}:</strong> 
+                        <span class="dealer-price">$${Number(price).toFixed(2)}</span>
+                    </div>`;
+            });
+            html += '</div></div>';
+            outputEl.innerHTML = html;
+        } catch (error) {
+            showError(`Failed to load prices: ${error.message}`);
+        }
+    }
+
+    // Event Listeners
+    selectEl.addEventListener('change', (e) => {
+        const productId = e.target.value;
+        if (!productId) {
+            showProductCards(productsCache);
+            return;
+        }
+        loadPrices(productId);
+    });
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', loadProducts);
+    </script>
+</body>
+</html>
